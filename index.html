@@ -1,0 +1,165 @@
+<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Atelier 3D — patronage</title>
+<style>
+:root{--ac:#ff2e88;--ink:#16161a;--bg:#f3f2ef;--gl:rgba(255,255,255,.74)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);font:500 13px/1.3 -apple-system,"Helvetica Neue",Arial,sans-serif;color:var(--ink);user-select:none;-webkit-user-select:none}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.gl{background:var(--gl);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid #fff;box-shadow:0 10px 40px rgba(0,0,0,.12)}
+.bar{position:fixed;top:46%;transform:translateY(-50%);display:flex;flex-direction:column;gap:6px;padding:7px;border-radius:24px}
+#L{left:max(8px,env(safe-area-inset-left))}#R{right:max(8px,env(safe-area-inset-right))}
+.b{width:52px;height:52px;border:0;border-radius:17px;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font:inherit;font-size:9.5px;color:var(--ink);cursor:pointer;transition:.15s}
+.b i{font-style:normal;font-size:21px;line-height:1.1}
+.b.on{background:var(--ink);color:#fff;box-shadow:0 5px 16px rgba(255,46,136,.5);outline:2px solid var(--ac)}
+.b:active{transform:scale(.93)}
+.sep{height:1px;background:#0001;margin:2px 6px}
+#top{position:fixed;left:0;right:0;top:max(10px,env(safe-area-inset-top));text-align:center;pointer-events:none}
+#top h1{margin:0;font-size:12px;letter-spacing:.42em;font-weight:800}#top h1 b{color:var(--ac)}
+#hint{margin-top:5px;font-size:11px;opacity:.6}
+#pill{position:fixed;top:calc(max(10px,env(safe-area-inset-top)) + 46px);left:50%;transform:translateX(-50%);padding:7px 12px;border-radius:20px;display:flex;flex-direction:column;gap:6px;align-items:center}
+#pill div{display:flex;gap:7px;align-items:center;font-size:10px}
+.sw{width:24px;height:24px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #0003;cursor:pointer;display:grid;place-items:center;font-size:12px}
+.sw.on{box-shadow:0 0 0 2.5px var(--ac)}
+#M{position:fixed;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));border-radius:22px;padding:8px 14px 10px;max-width:640px;margin:auto}
+#M h2{margin:0;font-size:11px;letter-spacing:.2em;display:flex;justify-content:space-between;cursor:pointer}
+#sl{display:grid;grid-template-columns:1fr 1fr;gap:2px 22px;margin-top:6px}
+#sl.h{display:none}
+.s label{display:flex;justify-content:space-between;font-size:11px}.s input{width:100%;accent-color:var(--ac);margin:2px 0 4px}
+#lab{position:fixed;display:none;padding:6px 10px;border-radius:12px;background:var(--ink);color:#fff;font-size:12px;pointer-events:none;white-space:pre;z-index:5}
+#PT{position:fixed;inset:0;background:#fff;z-index:9;display:none;flex-direction:column}
+#PT header{display:flex;gap:8px;align-items:center;padding:10px 12px;padding-top:max(10px,env(safe-area-inset-top))}
+#PT header span{flex:1;font-weight:800;letter-spacing:.15em;font-size:12px}
+#PT button{border:0;border-radius:14px;padding:9px 14px;font:inherit;font-weight:700;background:var(--ink);color:#fff;cursor:pointer}
+#PT button.p{background:var(--ac)}
+#sv{flex:1;overflow:auto;background:#f6f6f6}#sv svg{min-width:900px;width:100%;background:#fff;display:block}
+</style></head><body>
+<canvas id="c"></canvas>
+<div id="top"><h1>ATELIER <b>3D</b></h1><div id="hint"></div></div>
+<div id="L" class="bar gl"></div><div id="R" class="bar gl"></div>
+<div id="pill" class="gl"><div id="fab"><span>Tissu</span></div><div id="chk"><span>Craie</span><input id="br" type="range" min=".3" max="2" step=".1" value=".6" style="width:70px;accent-color:#ff2e88"></div></div>
+<div id="M" class="gl"><h2 id="mh"><span>MESURES (cm)</span><span id="ar">▾</span></h2><div id="sl"></div></div>
+<div id="lab"></div>
+<div id="PT"><header><span>PATRON · ÉCHELLE 1:1</span><button class="p" id="dl">Télécharger SVG</button><button id="cl">Fermer</button></header><div id="sv"></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const $=s=>document.querySelector(s),T=THREE,lerp=(a,b,t)=>a+(b-a)*t,cl=(v,a,b)=>Math.max(a,Math.min(b,v)),f=n=>n.toFixed(1).replace('.',',');
+const DEF={haut:{top:44,L:52,S:22,E:4},veste:{top:45,L:59,S:60,E:9},robe:{top:44,L:106,S:0,E:4},jupe:{top:0,L:50,S:0,E:2},pantalon:{top:0,L:80,S:0,E:3}};
+const S={type:'haut',P:92,T:74,H:98,E:4,L:52,S:22,tool:'main',col:'#ff2e88',br:.6,calico:true,fab:'#f2b8d0'};
+/* ---------- scène : pièce blanche ---------- */
+const cv=$('#c'),R=new T.WebGLRenderer({canvas:cv,antialias:true});R.setPixelRatio(Math.min(devicePixelRatio,2));R.shadowMap.enabled=true;R.shadowMap.type=T.PCFSoftShadowMap;
+const sc=new T.Scene();sc.background=new T.Color(0xf3f2ef);sc.fog=new T.Fog(0xf3f2ef,380,950);
+const cam=new T.PerspectiveCamera(35,1,1,2000);
+sc.add(new T.HemisphereLight(0xffffff,0xd9d6d1,.9));
+const sun=new T.DirectionalLight(0xffffff,.85);sun.position.set(90,270,150);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);Object.assign(sun.shadow.camera,{left:-130,right:130,top:130,bottom:-130,near:50,far:600});sun.shadow.bias=-.0007;sc.add(sun);
+const fl=new T.Mesh(new T.CircleGeometry(1500,48),new T.MeshStandardMaterial({color:0xf3f2ef,roughness:1}));fl.rotation.x=-Math.PI/2;fl.receiveShadow=true;sc.add(fl);
+const F=new T.Group();F.position.y=105;sc.add(F);const Mq=new T.Group(),G=new T.Group(),St=new T.Group();F.add(Mq,G,St);
+const skin=new T.MeshStandardMaterial({color:0xe7e3dd,roughness:.55,side:T.DoubleSide});
+const pole=new T.Mesh(new T.CylinderGeometry(1.3,1.3,81,14),skin);pole.position.y=-64.5;
+const base=new T.Mesh(new T.CylinderGeometry(24,25,2.5,56),skin);base.position.y=-103.8;base.receiveShadow=true;St.add(pole,base);
+/* ---------- corps (mesures → ellipses) ---------- */
+function prof(y){const P=S.P,T_=S.T,H=S.H,p=[[-24,H,.72],[-16,H,.72],[0,T_,.7],[24,P,.78],[36,P*1.02,.55],[41,P*.8,.5],[45,40,1],[60,37,1]];y=cl(y,-24,60);
+for(let i=0;i<p.length-1;i++){const a=p[i],b=p[i+1];if(y<=b[0]){let t=(y-a[0])/(b[0]-a[0]);t=(1-Math.cos(t*Math.PI))/2;return[lerp(a[1],b[1],t),lerp(a[2],b[2],t)]}}return[p[7][1],1]}
+const ab=(c,k)=>{const a=c/(Math.PI*(3*(1+k)-Math.sqrt((3+k)*(1+3*k))));return[a,a*k]};
+const per=(a,b)=>Math.PI*(3*(a+b)-Math.sqrt((3*a+b)*(a+3*b)));
+const legC=l=>l<40?lerp(S.H*.6,38,l/40):lerp(38,22,Math.min((l-40)/43,1)),armC=l=>lerp(31,19,Math.min(l/60,1));
+const SEG=56;
+function tube(rows,vo){const g=new T.BufferGeometry(),pos=[],uv=[],idx=[];
+rows.forEach(r=>{for(let j=0;j<=SEG;j++){const t=j/SEG*6.28319+Math.PI;pos.push(Math.sin(t)*r.a,r.y,Math.cos(t)*r.b);uv.push(j/SEG,(r.y+vo)/220+.5)}});
+for(let i=0;i<rows.length-1;i++)for(let j=0;j<SEG;j++){const a=i*(SEG+1)+j,b=a+SEG+1;idx.push(a,b,a+1,b,b+1,a+1)}
+g.setAttribute('position',new T.Float32BufferAttribute(pos,3));g.setAttribute('uv',new T.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();return g}
+const steps=(a,b,s)=>{const r=[];for(let v=a;v<b-.5;v+=s)r.push(v);r.push(b);return r};
+const lrows=(len,fn,e)=>steps(0,len,3).map(l=>{const a=(fn(l)+e)/6.28319;return{y:-l,a,b:a}});
+let legsOn=false;
+function body(){Mq.children.forEach(m=>m.geometry.dispose());Mq.clear();
+const r=steps(-24,60,2).map(y=>{const[c,k]=prof(y),[a,b]=ab(c,k);return{y,a,b}});
+const add=(g,x,y,z)=>{const m=new T.Mesh(g,skin);m.position.set(x,y,z||0);m.castShadow=true;Mq.add(m);return m};
+add(tube(r,0),0,0);const n=r[r.length-1],cap=add(new T.CircleGeometry(n.a,24),0,60);cap.rotation.x=-Math.PI/2;
+for(const sd of[-1,1]){add(tube(lrows(60,armC,0),0),sd*17,38).rotation.z=sd*.2;
+if(legsOn)add(tube(lrows(83,legC,0),0),sd*9.4,-22)}
+pole.visible=base.visible=true;pole.visible=!legsOn}
+/* ---------- textures (craie + calicot) ---------- */
+const CV={};
+function tex(k){if(!CV[k]){const c=document.createElement('canvas'),v=document.createElement('canvas');c.width=c.height=v.width=v.height=1024;const t=new T.CanvasTexture(v);t.anisotropy=8;CV[k]={c,v,t,x:c.getContext('2d'),vx:v.getContext('2d')}}redraw(k);return CV[k].t}
+function redraw(k){const o=CV[k],x=o.vx;x.fillStyle=S.calico?'#efe5cf':S.fab;x.fillRect(0,0,1024,1024);
+if(S.calico){x.strokeStyle='rgba(110,90,60,.28)';x.lineWidth=1;x.beginPath();for(let i=0;i<=1024;i+=51.2){x.moveTo(i,0);x.lineTo(i,1024)}for(let i=0;i<=1024;i+=23.3){x.moveTo(0,i);x.lineTo(1024,i)}x.stroke()}
+x.drawImage(o.c,0,0);o.t.needsUpdate=true}
+/* ---------- vêtement ---------- */
+let parts=[],rings=[];
+function build(){G.children.forEach(m=>m.geometry.dispose());G.clear();rings=[];parts=[];
+const d=DEF[S.type],fl_=S.type==='robe'||S.type==='jupe'?.4:0,hem=S.type==='pantalon'?-22-S.L:d.top-S.L;
+const torso=(y0,y1)=>steps(y1,y0,2).reverse().map(y=>{let c,k;if(y>=-24)[c,k]=prof(y);else{[c,k]=prof(-24);c+=fl_*(-24-y)}c+=S.E;const[a,b]=ab(c,k);return{y,a,b}});
+if(S.type==='pantalon'){parts.push({k:'bassin',n:'bassin',rows:torso(0,-22),pos:[0,0,0]});for(const sd of[-1,1])parts.push({k:'jambe'+sd,n:'jambe',rows:lrows(S.L,legC,S.E),pos:[sd*9.4,-22,0],hem:1})}
+else parts.push({k:S.type,n:'corps',rows:torso(d.top,hem),pos:[0,0,0],hem:1});
+if(['haut','veste','robe'].includes(S.type)&&S.S>0)for(const sd of[-1,1])parts.push({k:S.type+'m'+sd,n:'manche',rows:lrows(S.S,armC,S.E+1),pos:[sd*17,38,0],rot:sd*.2,sl:1});
+parts.forEach(p=>{const m=new T.Mesh(tube(p.rows,p.pos[1]),new T.MeshStandardMaterial({map:tex(p.k),roughness:.92,side:T.DoubleSide}));m.position.set(...p.pos);m.rotation.z=p.rot||0;m.castShadow=m.receiveShadow=true;m.userData.p=p;
+if(p.hem){const r=p.rows[p.rows.length-1],pts=[];for(let i=0;i<64;i++){const t=i/64*6.28319;pts.push(new T.Vector3(Math.sin(t)*(r.a+.2),r.y,Math.cos(t)*(r.b+.2)))}
+const ln=new T.LineLoop(new T.BufferGeometry().setFromPoints(pts),new T.LineBasicMaterial({color:0xff2e88}));ln.visible=S.tool==='cut';m.add(ln);rings.push(ln)}G.add(m)})}
+function all(){legsOn=['pantalon','jupe','robe'].includes(S.type);body();build();sync()}
+/* ---------- interface ---------- */
+const GA=[['haut','👕','Haut'],['veste','🧥','Veste'],['pantalon','👖','Pantalon'],['robe','👗','Robe'],['jupe','▽','Jupe']];
+GA.forEach(([k,i,n])=>{const b=document.createElement('button');b.className='b';b.dataset.g=k;b.innerHTML=`<i>${i}</i>${n}`;b.onclick=()=>{S.type=k;const d=DEF[k];S.L=d.L;S.S=d.S;S.E=d.E;all()};$('#L').appendChild(b)});
+const TL=[['main','✋','Main'],['chalk','✏️','Craie'],['cut','✂️','Ciseaux'],['ruler','📏','Ruban']],HT={main:'1 doigt : tourner · 2 doigts : zoom',chalk:'Dessine tes repères directement sur le tissu',cut:'Glisse sur le vêtement : coupe ourlet / manches à cet endroit',ruler:'Touche le vêtement : tour mesuré à cette hauteur'};
+TL.forEach(([k,i,n])=>{const b=document.createElement('button');b.className='b';b.dataset.t=k;b.innerHTML=`<i>${i}</i>${n}`;b.onclick=()=>setTool(k);$('#R').appendChild(b)});
+$('#R').insertAdjacentHTML('beforeend','<div class="sep"></div>');
+const bc=document.createElement('button');bc.className='b on';bc.innerHTML='<i>▦</i>Calicot';bc.onclick=()=>{S.calico=true;fabUI();for(const k in CV)redraw(k)};$('#R').appendChild(bc);
+const bp=document.createElement('button');bp.className='b';bp.innerHTML='<i>✂︎</i>Patron';bp.onclick=openPat;bp.style.background='var(--ac)';bp.style.color='#fff';$('#R').appendChild(bp);
+function setTool(t){S.tool=t;document.querySelectorAll('[data-t]').forEach(b=>b.classList.toggle('on',b.dataset.t===t));$('#hint').textContent=HT[t];$('#chk').style.display=t==='chalk'?'flex':'none';rings.forEach(r=>r.visible=t==='cut')}
+const FC=[['#efe5cf','cal'],'#f2b8d0','#b9d4f2','#cfe8c9','#f0d9a8','#2a2a30','#7a1f3d'];
+FC.forEach(c=>{const s=document.createElement('div');s.className='sw';s.style.background=Array.isArray(c)?c[0]:c;s.dataset.c=Array.isArray(c)?'cal':c;s.onclick=()=>{if(s.dataset.c==='cal')S.calico=true;else{S.calico=false;S.fab=s.dataset.c}fabUI();for(const k in CV)redraw(k)};$('#fab').appendChild(s)});
+function fabUI(){document.querySelectorAll('#fab .sw').forEach(s=>s.classList.toggle('on',S.calico?s.dataset.c==='cal':s.dataset.c===S.fab));bc.classList.toggle('on',S.calico)}
+['#ff2e88','#1a1a1a','#1e6bff','#00a86b','#ff8a00','#ffffff','erase'].forEach(c=>{const s=document.createElement('div');s.className='sw'+(c===S.col?' on':'');s.dataset.c=c;s.style.background=c==='erase'?'#fff':c;if(c==='erase')s.textContent='⌫';s.onclick=()=>{S.col=c;document.querySelectorAll('#chk .sw').forEach(x=>x.classList.toggle('on',x===s))};$('#chk').appendChild(s)});
+$('#br').oninput=e=>S.br=+e.target.value;
+const SL=[['P','Poitrine',70,130,1],['T','Taille',55,120,1],['H','Hanches',75,140,1],['E','Aisance',1,25,.5],['L','Longueur',12,112,1],['S','Manche',8,60,1]];
+SL.forEach(([k,n,a,b,st])=>{const d=document.createElement('div');d.className='s';d.id='s'+k;d.innerHTML=`<label>${n}<b></b></label><input type="range" min="${a}" max="${b}" step="${st}">`;d.querySelector('input').oninput=e=>{S[k]=+e.target.value;if(k==='P'||k==='T'||k==='H'){body()}build();sync()};$('#sl').appendChild(d)});
+$('#mh').onclick=()=>{$('#sl').classList.toggle('h');$('#ar').textContent=$('#sl').classList.contains('h')?'▸':'▾'};
+function sync(){const d=DEF[S.type],mx=S.type==='pantalon'?83:d.top+103;S.L=cl(S.L,12,mx);const hasS=['haut','veste','robe'].includes(S.type);
+SL.forEach(([k])=>{const e=$('#s'+k),i=e.querySelector('input');if(k==='L')i.max=mx;i.value=S[k];e.querySelector('b').textContent=f(+S[k]).replace(',0','')+' cm'});
+$('#sS').style.display=hasS?'':'none';$('#sL label').firstChild.textContent=S.type==='pantalon'?'Jambe ':'Longueur ';
+document.querySelectorAll('[data-g]').forEach(b=>b.classList.toggle('on',b.dataset.g===S.type))}
+/* ---------- caméra & doigts ---------- */
+const O={th:.55,ph:1.42,d:215,t:new T.Vector3(0,150,0)};
+function camSet(){cam.position.set(O.t.x+O.d*Math.sin(O.ph)*Math.sin(O.th),O.t.y+O.d*Math.cos(O.ph),O.t.z+O.d*Math.sin(O.ph)*Math.cos(O.th));cam.lookAt(O.t)}
+const orb=(dx,dy)=>{O.th-=dx*.008;O.ph=cl(O.ph-dy*.006,.35,1.75)};
+function resize(){R.setSize(innerWidth,innerHeight,false);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix()}addEventListener('resize',resize);
+const P=new Map();let lu=null,lk=null;const lab=$('#lab'),RR=new T.LineLoop(new T.BufferGeometry(),new T.LineBasicMaterial({color:0x111111}));
+cv.onpointerdown=e=>{cv.setPointerCapture(e.pointerId);P.set(e.pointerId,[e.clientX,e.clientY]);lu=null;if(P.size===1)act(e)};
+cv.onpointermove=e=>{const o=P.get(e.pointerId);if(!o)return;const n=[e.clientX,e.clientY];
+if(P.size>=2){const oid=[...P.keys()].find(i=>i!==e.pointerId),q=P.get(oid),d0=Math.hypot(o[0]-q[0],o[1]-q[1]),d1=Math.hypot(n[0]-q[0],n[1]-q[1]);O.d=cl(O.d*d0/Math.max(d1,1),70,450);orb((n[0]-o[0])/2,(n[1]-o[1])/2)}
+else if(S.tool==='main')orb(n[0]-o[0],n[1]-o[1]);else act(e);P.set(e.pointerId,n)};
+cv.onpointerup=cv.onpointercancel=e=>{P.delete(e.pointerId);lu=null;lab.style.display='none'};
+cv.addEventListener('wheel',e=>{O.d=cl(O.d*(1+e.deltaY*.001),70,450);e.preventDefault()},{passive:false});
+function act(e){const t=S.tool;if(t==='main')return;const rc=new T.Raycaster();rc.setFromCamera(new T.Vector2(e.clientX/innerWidth*2-1,-e.clientY/innerHeight*2+1),cam);
+const h=rc.intersectObjects(G.children,false)[0];if(!h){lu=null;return}const m=h.object,p=m.userData.p,ly=m.worldToLocal(h.point.clone()).y;
+if(t==='chalk')paint(p.k,h.uv);
+else if(t==='cut'){if(p.sl)S.S=cl(Math.round(-ly),8,60);else if(p.hem){const y=F.worldToLocal(h.point.clone()).y;S.L=Math.round((S.type==='pantalon'?-22-y:DEF[S.type].top-y)*2)/2}else return;build();sync()}
+else{const r=p.rows;let i=0;while(i<r.length-2&&ly<r[i+1].y)i++;const A=r[i],B=r[i+1],u=cl((A.y-ly)/(A.y-B.y),0,1),a=lerp(A.a,B.a,u),b=lerp(A.b,B.b,u),pts=[];
+for(let j=0;j<64;j++){const q=j/64*6.28319;pts.push(new T.Vector3(Math.sin(q)*(a+.25),ly,Math.cos(q)*(b+.25)))}
+RR.geometry.dispose();RR.geometry=new T.BufferGeometry().setFromPoints(pts);m.add(RR);const wy=F.worldToLocal(h.point.clone()).y;
+lab.textContent=`Tour : ${f(per(a,b))} cm\n${f(Math.abs(wy))} cm ${wy>=0?'au-dessus':'sous'} la taille`;lab.style.display='block';lab.style.left=Math.min(e.clientX+14,innerWidth-170)+'px';lab.style.top=Math.max(e.clientY-64,60)+'px'}}
+function paint(k,uv){const o=CV[k],x=o.x,px=uv.x*1024,py=(1-uv.y)*1024,rx=S.br*10,ry=S.br*4.65;
+x.globalCompositeOperation=S.col==='erase'?'destination-out':'source-over';x.fillStyle=S.col==='erase'?'#000':S.col;x.globalAlpha=.9;
+const dot=(a,b)=>{x.beginPath();x.ellipse(a,b,rx,ry,0,0,6.2832);x.fill()};
+if(lu&&lk===k&&Math.abs(uv.x-lu.x)<.4){const dx=px-lu.px,dy=py-lu.py,n=Math.max(1,Math.ceil(Math.hypot(dx,dy)/(rx*.4)));for(let i=1;i<=n;i++)dot(lu.px+dx*i/n,lu.py+dy*i/n)}else dot(px,py);
+lu={x:uv.x,px,py};lk=k;x.globalAlpha=1;x.globalCompositeOperation='source-over';redraw(k)}
+/* ---------- patron 1:1 ---------- */
+const pw=r=>per(r.a,r.b)/2;
+function pattern(){const W=170,items=[],marks=[[24,'Poitrine'],[0,'Taille'],[-20,'Hanches']];let x=4,y=14,rowH=0,svg='';
+const list=[];parts.forEach(p=>{if(p.k==='jambe1'||p.k.endsWith('m1'))return;
+if(p.n==='corps')list.push(['Devant ×1',p],['Dos ×1',p]);else if(p.n==='bassin')list.push(['Bassin devant ×1',p],['Bassin dos ×1',p]);else if(p.n==='jambe')list.push(['Jambe devant ×2',p],['Jambe dos ×2',p]);else list.push(['Manche ×2',p])});
+list.forEach(([name,p])=>{const r=p.rows,y0=r[0].y,w=r.map(pw),mw=Math.max(...w)+4,cap=p.n==='manche',h=y0-r[r.length-1].y,top=cap?10:3;
+if(x+mw>W&&x>4){x=4;y+=rowH+16;rowH=0}const cx=x+mw/2,oy=y+top,w0=w[0];
+const L=r.map((q,i)=>[cx-w[i]/2,oy+y0-q.y]),Rr=L.map((q,i)=>[cx+w[i]/2,q[1]]).reverse();
+const path=(a,b,e,bt,tp)=>{const A=a.map((q,i)=>[q[0]-e,q[1]+(i===a.length-1?bt:0)]),B=b.map((q,i)=>[q[0]+e,q[1]+(i===0?bt:0)]);return'M'+A.concat(B).map(q=>q.join(',')).join('L')+(cap?`Q${cx},${oy-9} ${A[0][0]},${A[0][1]}`:'')+'Z'};
+svg+=`<path d="${path(L,Rr,1,3)}" fill="none" stroke="#ff2e88" stroke-width=".25" stroke-dasharray="1.2 .8"/><path d="${path(L,Rr,0,0)}" fill="#fff6fa" stroke="#111" stroke-width=".35"/>`;
+if(p.n==='corps'||p.n==='bassin')marks.forEach(([my,t])=>{if(my<=y0&&my>=r[r.length-1].y){const yy=oy+y0-my;svg+=`<line x1="${cx-w0/2-3}" x2="${cx-w0/2+4}" y1="${yy}" y2="${yy}" stroke="#111" stroke-width=".3"/><text x="${cx-w0/2+5}" y="${yy-.6}" font-size="1.5" fill="#777">${t}</text>`}});
+svg+=`<line x1="${cx}" x2="${cx}" y1="${oy+8}" y2="${oy+h-4}" stroke="#555" stroke-width=".3"/><path d="M${cx},${oy+6} l-1,2.5 h2z M${cx},${oy+h-2} l-1,-2.5 h2z" fill="#555"/>`;
+svg+=`<text x="${cx}" y="${oy-top+2.4}" text-anchor="middle" font-size="2.3" font-weight="700">${name}</text><text x="${cx}" y="${oy+h+8}" text-anchor="middle" font-size="1.7" fill="#555">L ${f(Math.max(...w))} × H ${f(h)} cm</text>`;
+x+=mw+8;rowH=Math.max(rowH,h+top+10)});
+const H=y+rowH+18;let g='';for(let i=0;i<=W;i+=10)g+=`<line x1="${i}" x2="${i}" y1="0" y2="${H}"/>`;for(let i=0;i<=H;i+=10)g+=`<line y1="${i}" y2="${i}" x1="0" x2="${W}"/>`;
+return`<svg xmlns="http://www.w3.org/2000/svg" width="${W}cm" height="${H}cm" viewBox="0 0 ${W} ${H}" font-family="Helvetica,Arial,sans-serif"><rect width="${W}" height="${H}" fill="#fff"/><g stroke="#e6e6e6" stroke-width=".12">${g}</g><text x="4" y="5" font-size="2.6" font-weight="800">ATELIER 3D · ${S.type.toUpperCase()}</text><text x="4" y="9" font-size="1.7" fill="#555">Poitrine ${S.P} · Taille ${S.T} · Hanches ${S.H} · Aisance ${f(S.E)} cm — trait rose = ligne de coupe (couture +1 cm, ourlet +3 cm) — quadrillage 10 cm</text>${svg}<path d="M4,${H-6} h10" stroke="#111" stroke-width=".5"/><text x="16" y="${H-5.4}" font-size="1.7">10 cm — vérifie à l'impression (échelle 100 %)</text></svg>`}
+function openPat(){const s=pattern();$('#sv').innerHTML=s.replace(/width="[\d.]+cm" height="[\d.]+cm"/,'');$('#PT').style.display='flex';$('#PT').dataset.s=s}
+$('#cl').onclick=()=>$('#PT').style.display='none';
+$('#dl').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([$('#PT').dataset.s],{type:'image/svg+xml'}));a.download='patron-'+S.type+'.svg';a.click()};
+/* ---------- go ---------- */
+resize();if(innerWidth<innerHeight*.8)O.d=265;setTool('main');fabUI();all();
+(function loop(){camSet();R.render(sc,cam);requestAnimationFrame(loop)})();
+</script></body></html>
